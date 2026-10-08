@@ -1,4 +1,5 @@
 import { useGameStore } from '../store/gameStore';
+import { playSound } from '../audio/soundManager';
 
 export default function MissionResult({ onRestart }) {
   const {
@@ -87,7 +88,7 @@ export default function MissionResult({ onRestart }) {
 
         {/* Try Again Button */}
         <button
-          onClick={onRestart}
+          onClick={() => { playSound('click'); onRestart(); }}
           className={`w-full py-4 font-black rounded-2xl text-lg 
                      hover:scale-105 active:scale-95 transition-all
                      shadow-2xl ${
