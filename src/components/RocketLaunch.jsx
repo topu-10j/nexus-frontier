@@ -1,38 +1,52 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { playSound } from '../audio/soundManager';
 
 export default function RocketLaunch({ planet, onComplete }) {
   const [phase, setPhase] = useState('ready'); // 'ready' | 'countdown' | 1 | 2 | 3 | 4
   const [countdown, setCountdown] = useState(3);
+  const soundPlayedRef = useRef({ 3: false, 2: false, 1: false });
 
-  // === COUNTDOWN PHASE ===
+  // ============ COUNTDOWN TIMER — Play sound per number ============
   useEffect(() => {
     if (phase !== 'countdown') return;
 
     if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      // Play sound ONLY once per number
+      if (!soundPlayedRef.current[countdown]) {
+        playSound('click');
+        soundPlayedRef.current[countdown] = true;
+      }
+
+      const timer = setTimeout(() => {
+        setCountdown(countdown - 1);
+      }, 1000);
       return () => clearTimeout(timer);
     } else {
-      // Countdown শেষ → LIFT OFF (fast: 0.5s delay)
+      // Countdown finished → LIFT OFF
+      playSound('rocketLaunch');
       const timer = setTimeout(() => setPhase(1), 500);
       return () => clearTimeout(timer);
     }
   }, [countdown, phase]);
 
-  // === PHASE PROGRESSION (fast timing) ===
+  // ============ PHASE PROGRESSION ============
   useEffect(() => {
     if (typeof phase !== 'number') return;
 
     const timers = [];
-    if (phase === 1) timers.push(setTimeout(() => setPhase(2), 2000)); // Lift off: 2s
-    if (phase === 2) timers.push(setTimeout(() => setPhase(3), 1500)); // Space: 1.5s
-    if (phase === 3) timers.push(setTimeout(() => setPhase(4), 2000)); // Horizontal: 2s
-    if (phase === 4) timers.push(setTimeout(() => onComplete(), 1500)); // Approaching: 1.5s
+    if (phase === 1) timers.push(setTimeout(() => setPhase(2), 2000));
+    if (phase === 2) timers.push(setTimeout(() => setPhase(3), 1500));
+    if (phase === 3) timers.push(setTimeout(() => setPhase(4), 2000));
+    if (phase === 4) timers.push(setTimeout(() => onComplete(), 1500));
 
     return () => timers.forEach((t) => clearTimeout(t));
   }, [phase]);
 
   const handleStart = () => {
+    playSound('click');
+    // Reset sound tracking
+    soundPlayedRef.current = { 3: false, 2: false, 1: false };
     setPhase('countdown');
   };
 
@@ -40,7 +54,7 @@ export default function RocketLaunch({ planet, onComplete }) {
     <div className="h-screen w-screen bg-black relative overflow-hidden">
       <AnimatePresence mode="wait">
 
-        {/* ============ PHASE 'ready': Rocket waiting + START button ============ */}
+        {/* ============ PHASE 'ready' ============ */}
         {phase === 'ready' && (
           <motion.div
             key="ready"
@@ -52,7 +66,6 @@ export default function RocketLaunch({ planet, onComplete }) {
           >
             <div className="absolute inset-0 stars-bg" />
 
-            {/* Rocket at launch pad */}
             <motion.div
               initial={{ y: 0 }}
               animate={{ y: [-5, 5, -5] }}
@@ -62,14 +75,12 @@ export default function RocketLaunch({ planet, onComplete }) {
               🚀
             </motion.div>
 
-            {/* Launch pad glow */}
             <motion.div
               animate={{ opacity: [0.3, 0.7, 0.3], scale: [1, 1.2, 1] }}
               transition={{ duration: 2, repeat: Infinity }}
               className="absolute top-[60%] left-1/2 -translate-x-1/2 w-64 h-4 bg-orange-500/50 blur-xl rounded-full"
             />
 
-            {/* Top info */}
             <div className="absolute top-12 left-1/2 -translate-x-1/2 text-center z-10">
               <motion.h1
                 initial={{ opacity: 0, y: -20 }}
@@ -88,7 +99,6 @@ export default function RocketLaunch({ planet, onComplete }) {
               </motion.p>
             </div>
 
-            {/* Mission info */}
             <div className="absolute top-32 left-1/2 -translate-x-1/2 text-center z-10 flex gap-8">
               <div>
                 <p className="text-gray-500 text-xs">DISTANCE</p>
@@ -104,7 +114,6 @@ export default function RocketLaunch({ planet, onComplete }) {
               </div>
             </div>
 
-            {/* START button */}
             <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20">
               <motion.button
                 initial={{ opacity: 0, scale: 0.8 }}
@@ -112,6 +121,7 @@ export default function RocketLaunch({ planet, onComplete }) {
                 transition={{ delay: 0.5 }}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
+                onMouseEnter={() => playSound('hover')}
                 onClick={handleStart}
                 className="px-12 py-5 bg-gradient-to-r from-orange-500 to-red-600 
                            text-white font-bold rounded-full text-xl tracking-wider
@@ -129,7 +139,7 @@ export default function RocketLaunch({ planet, onComplete }) {
           </motion.div>
         )}
 
-        {/* ============ PHASE 'countdown': 3-2-1 ============ */}
+        {/* ============ PHASE 'countdown' ============ */}
         {phase === 'countdown' && (
           <motion.div
             key="countdown"
@@ -155,6 +165,7 @@ export default function RocketLaunch({ planet, onComplete }) {
               className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 border-4 border-orange-500 rounded-full z-10"
             />
 
+            {/* Big countdown number with animation */}
             <motion.div
               key={countdown}
               initial={{ scale: 0.3, opacity: 0 }}
@@ -180,7 +191,7 @@ export default function RocketLaunch({ planet, onComplete }) {
           </motion.div>
         )}
 
-        {/* ============ PHASE 1: LIFT OFF (fast: 2s) ============ */}
+        {/* ============ PHASE 1: LIFT OFF ============ */}
         {phase === 1 && (
           <motion.div
             key="phase1"
@@ -206,7 +217,7 @@ export default function RocketLaunch({ planet, onComplete }) {
               ))}
             </div>
 
-            {/* Massive smoke */}
+            {/* Massive smoke clouds */}
             <div className="absolute bottom-[15%] left-1/2 -translate-x-1/2 z-10 pointer-events-none">
               <motion.div
                 initial={{ scale: 0.3, opacity: 0 }}
@@ -262,10 +273,15 @@ export default function RocketLaunch({ planet, onComplete }) {
           </motion.div>
         )}
 
-        {/* ============ PHASE 2: SPACE (fast: 1.5s) ============ */}
+        {/* ============ PHASE 2: SPACE ============ */}
         {phase === 2 && (
-          <motion.div key="phase2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black">
+          <motion.div
+            key="phase2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black"
+          >
             <div className="absolute inset-0 stars-bg" />
             <motion.div
               initial={{ bottom: '-30%', scale: 1.5 }}
@@ -289,10 +305,15 @@ export default function RocketLaunch({ planet, onComplete }) {
           </motion.div>
         )}
 
-        {/* ============ PHASE 3: HORIZONTAL (fast: 2s) ============ */}
+        {/* ============ PHASE 3: HORIZONTAL ============ */}
         {phase === 3 && (
-          <motion.div key="phase3" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black">
+          <motion.div
+            key="phase3"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black"
+          >
             <div className="absolute inset-0 stars-bg" />
             <motion.div
               initial={{ right: '5%', top: '40%', scale: 0.3, opacity: 0.5 }}
@@ -318,10 +339,15 @@ export default function RocketLaunch({ planet, onComplete }) {
           </motion.div>
         )}
 
-        {/* ============ PHASE 4: APPROACHING (fast: 1.5s) ============ */}
+        {/* ============ PHASE 4: APPROACHING ============ */}
         {phase === 4 && (
-          <motion.div key="phase4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black">
+          <motion.div
+            key="phase4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black"
+          >
             <div className="absolute inset-0 stars-bg" />
             <motion.div
               initial={{ scale: 1.5, opacity: 0.6 }}

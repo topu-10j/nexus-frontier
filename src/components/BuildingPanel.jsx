@@ -1,93 +1,82 @@
-// src/components/BuildingPanel.jsx
-// BuildingPanel — ৬টা বিল্ডিং drag-drop এর জন্য
-
+import { useState } from 'react';
 import { buildings } from '../data/buildings';
 import { useGameStore } from '../store/gameStore';
-import { motion } from 'framer-motion';
+import { playSound } from '../audio/soundManager';
+
+const buildingDesc = {
+  oxygen: 'Generates breathable oxygen',
+  power: 'Produces colony electricity',
+  thermal: 'Controls temperature',
+  shield: 'Protects from radiation',
+  bio: 'Grows food supply',
+  water: 'Extracts water from soil',
+};
 
 export default function BuildingPanel() {
-  const budget = useGameStore((s) => s.budget);
-  const addBuilding = useGameStore((s) => s.addBuilding);
+  const { budget, addBuilding } = useGameStore();
+  const [selected, setSelected] = useState(null);
 
-  // Drag শুরু হলে বিল্ডিং ডেটা পাঠাবো
-  const handleDragStart = (e, building) => {
-    e.dataTransfer.setData('building', JSON.stringify(building));
-  };
-
-  // Click করলে বিল্ডিং যোগ হবে (drag এর বিকল্প)
-  const handleClick = (building) => {
-    if (budget >= building.cost) {
-      addBuilding({
-        ...building,
-        position: [
-          Math.random() * 8 - 4,
-          0,
-          Math.random() * 8 - 4,
-        ],
-      });
+  const handleSelect = (building) => {
+    if (budget < building.cost) {
+      playSound('hazard');
+      alert(`❌ Not enough budget! Need $${building.cost}`);
+      return;
     }
+    playSound('click');
+    setSelected(building);
+
+    const position = [
+      (Math.random() - 0.5) * 10,
+      -0.4,
+      (Math.random() - 0.5) * 10,
+    ];
+
+    addBuilding(building, position);
+    setTimeout(() => setSelected(null), 500);
   };
 
   return (
-    <div className="absolute right-3 top-24 bottom-3 w-56 z-50 overflow-y-auto
-                    bg-black/70 backdrop-blur-md rounded-xl p-3
-                    border border-cyan-500/30">
-      <h3 className="text-cyan-400 font-bold mb-3 text-center text-sm">
-        🏗️ BUILDINGS
-      </h3>
+    <div className="absolute bottom-4 right-4 z-20">
+      <div className="bg-black/70 backdrop-blur-lg border-2 border-cyan-500/30 rounded-2xl p-3 w-64 shadow-2xl">
+        <p className="text-cyan-300 text-xs font-bold tracking-wider text-center mb-3">
+          🏗️ BUILD STRUCTURES
+        </p>
 
-      <div className="space-y-2">
-        {buildings.map((building) => {
-          const canAfford = budget >= building.cost;
-
-          // effect থাকলে দেখাবো, না থাকলে খালি
-          const effectEntries = building.effect
-            ? Object.entries(building.effect)
-            : [];
-
-          return (
-            <motion.div
-              key={building.id}
-              draggable={canAfford}
-              onDragStart={(e) => handleDragStart(e, building)}
-              onClick={() => canAfford && handleClick(building)}
-              whileHover={{ scale: canAfford ? 1.03 : 1 }}
-              className={`p-2 rounded-lg border cursor-pointer transition-all ${
-                canAfford
-                  ? 'bg-gray-800/80 border-cyan-500/40 hover:border-cyan-400'
-                  : 'bg-gray-900/50 border-gray-700 opacity-40 cursor-not-allowed'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">{building.icon}</span>
-                <div className="flex-1">
-                  <div className="text-white text-xs font-semibold">
-                    {building.name}
-                  </div>
-                  <div className="text-yellow-400 text-xs">
-                    ${building.cost}
-                  </div>
+        <div className="flex flex-col gap-2">
+          {buildings.map((b) => {
+            const canAfford = budget >= b.cost;
+            return (
+              <button
+                key={b.id}
+                onClick={() => handleSelect(b)}
+                disabled={!canAfford}
+                onMouseEnter={() => canAfford && playSound('hover')}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 transition-all text-left
+                  ${
+                    canAfford
+                      ? 'bg-white/5 hover:bg-cyan-500/20 border-cyan-500/30 hover:border-cyan-400 cursor-pointer hover:scale-[1.02]'
+                      : 'bg-gray-900/50 border-gray-800 opacity-40 cursor-not-allowed'
+                  }
+                  ${selected?.id === b.id ? 'ring-2 ring-cyan-400' : ''}
+                `}
+              >
+                <span className="text-2xl">{b.icon}</span>
+                <div className="flex flex-col flex-1 min-w-0">
+                  <span className="text-white text-xs font-bold">{b.name}</span>
+                  <span className="text-white/50 text-[9px] truncate">{buildingDesc[b.id]}</span>
                 </div>
-              </div>
+                <span className={`text-sm font-bold ${canAfford ? 'text-yellow-300' : 'text-red-400'}`}>
+                  ${b.cost}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
-              {/* Effect summary — safety check সহ */}
-              {effectEntries.length > 0 && (
-                <div className="text-[10px] text-gray-400 mt-1">
-                  {effectEntries.map(([key, val]) => (
-                    <span key={key} className="mr-2">
-                      {key}: {val > 0 ? '+' : ''}{val}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          );
-        })}
+        <p className="text-white/40 text-[9px] text-center mt-3">
+          Click to place building
+        </p>
       </div>
-
-      <p className="text-[10px] text-gray-500 mt-3 text-center">
-        Drag or click to place
-      </p>
     </div>
   );
 }

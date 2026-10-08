@@ -1,10 +1,16 @@
 import { motion } from 'framer-motion';
+import { playSound } from '../audio/soundManager';
 
 export default function Landing({ onEnter }) {
+  const handleEnter = () => {
+    playSound('click');
+    onEnter();
+  };
+
   return (
     <div className="h-screen w-screen bg-black flex flex-col items-center justify-center relative overflow-hidden">
       <div className="absolute inset-0 stars-bg" />
-      
+
       <motion.h1
         initial={{ opacity: 0, y: 50 }}
         animate={{ opacity: 1, y: 0 }}
@@ -13,7 +19,7 @@ export default function Landing({ onEnter }) {
       >
         NEXUS-FRONTIER
       </motion.h1>
-      
+
       <motion.p
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -22,12 +28,13 @@ export default function Landing({ onEnter }) {
       >
         Build a colony. Survive the frontier.
       </motion.p>
-      
+
       <motion.button
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 2, duration: 0.5 }}
-        onClick={onEnter}
+        onMouseEnter={() => playSound('hover')}
+        onClick={handleEnter}
         className="mt-12 px-10 py-4 bg-cyan-500 text-black font-bold 
                    rounded-full text-lg z-10 hover:bg-cyan-400 
                    transition-all animate-pulse"
