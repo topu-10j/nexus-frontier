@@ -1,38 +1,47 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { playSound } from '../audio/soundManager';
 
 export default function RocketLaunch({ planet, onComplete }) {
-  const [phase, setPhase] = useState('ready'); // 'ready' | 'countdown' | 1 | 2 | 3 | 4
+  const [phase, setPhase] = useState('ready');
   const [countdown, setCountdown] = useState(3);
+  const soundPlayedRef = useRef({ 3: false, 2: false, 1: false });
 
-  // === COUNTDOWN PHASE ===
+  // ============ COUNTDOWN ============
   useEffect(() => {
     if (phase !== 'countdown') return;
 
     if (countdown > 0) {
+      if (!soundPlayedRef.current[countdown]) {
+        playSound('click');
+        soundPlayedRef.current[countdown] = true;
+      }
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
       return () => clearTimeout(timer);
     } else {
-      // Countdown শেষ → LIFT OFF (fast: 0.5s delay)
+      playSound('rocketLaunch');
       const timer = setTimeout(() => setPhase(1), 500);
       return () => clearTimeout(timer);
     }
   }, [countdown, phase]);
 
-  // === PHASE PROGRESSION (fast timing) ===
+  // ============ PHASE PROGRESSION ============
   useEffect(() => {
     if (typeof phase !== 'number') return;
 
     const timers = [];
-    if (phase === 1) timers.push(setTimeout(() => setPhase(2), 2000)); // Lift off: 2s
-    if (phase === 2) timers.push(setTimeout(() => setPhase(3), 1500)); // Space: 1.5s
-    if (phase === 3) timers.push(setTimeout(() => setPhase(4), 2000)); // Horizontal: 2s
-    if (phase === 4) timers.push(setTimeout(() => onComplete(), 1500)); // Approaching: 1.5s
+    if (phase === 1) timers.push(setTimeout(() => setPhase(2), 2000));
+    if (phase === 2) timers.push(setTimeout(() => setPhase(3), 1500));
+    if (phase === 3) timers.push(setTimeout(() => setPhase(4), 2000));
+    if (phase === 4) timers.push(setTimeout(() => setPhase(5), 1500));
+    if (phase === 5) timers.push(setTimeout(() => onComplete(), 5000));
 
     return () => timers.forEach((t) => clearTimeout(t));
   }, [phase]);
 
   const handleStart = () => {
+    playSound('click');
+    soundPlayedRef.current = { 3: false, 2: false, 1: false };
     setPhase('countdown');
   };
 
@@ -40,7 +49,7 @@ export default function RocketLaunch({ planet, onComplete }) {
     <div className="h-screen w-screen bg-black relative overflow-hidden">
       <AnimatePresence mode="wait">
 
-        {/* ============ PHASE 'ready': Rocket waiting + START button ============ */}
+        {/* ============ PHASE 'ready' ============ */}
         {phase === 'ready' && (
           <motion.div
             key="ready"
@@ -52,24 +61,22 @@ export default function RocketLaunch({ planet, onComplete }) {
           >
             <div className="absolute inset-0 stars-bg" />
 
-            {/* Rocket at launch pad */}
             <motion.div
               initial={{ y: 0 }}
               animate={{ y: [-5, 5, -5] }}
               transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-9xl z-10"
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
+              style={{ rotate: '-45deg' }}
             >
-              🚀
+              <span className="text-9xl inline-block">🚀</span>
             </motion.div>
 
-            {/* Launch pad glow */}
             <motion.div
               animate={{ opacity: [0.3, 0.7, 0.3], scale: [1, 1.2, 1] }}
               transition={{ duration: 2, repeat: Infinity }}
               className="absolute top-[60%] left-1/2 -translate-x-1/2 w-64 h-4 bg-orange-500/50 blur-xl rounded-full"
             />
 
-            {/* Top info */}
             <div className="absolute top-12 left-1/2 -translate-x-1/2 text-center z-10">
               <motion.h1
                 initial={{ opacity: 0, y: -20 }}
@@ -88,23 +95,27 @@ export default function RocketLaunch({ planet, onComplete }) {
               </motion.p>
             </div>
 
-            {/* Mission info */}
             <div className="absolute top-32 left-1/2 -translate-x-1/2 text-center z-10 flex gap-8">
               <div>
                 <p className="text-gray-500 text-xs">DISTANCE</p>
-                <p className="text-white text-lg font-bold">{planet?.data?.distance}</p>
+                <p className="text-white text-lg font-bold">
+                  {planet?.data?.distance}
+                </p>
               </div>
               <div>
                 <p className="text-gray-500 text-xs">TEMPERATURE</p>
-                <p className="text-white text-lg font-bold">{planet?.data?.temperature}</p>
+                <p className="text-white text-lg font-bold">
+                  {planet?.data?.temperature}
+                </p>
               </div>
               <div>
                 <p className="text-gray-500 text-xs">GRAVITY</p>
-                <p className="text-white text-lg font-bold">{planet?.data?.gravity}</p>
+                <p className="text-white text-lg font-bold">
+                  {planet?.data?.gravity}
+                </p>
               </div>
             </div>
 
-            {/* START button */}
             <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20">
               <motion.button
                 initial={{ opacity: 0, scale: 0.8 }}
@@ -112,6 +123,7 @@ export default function RocketLaunch({ planet, onComplete }) {
                 transition={{ delay: 0.5 }}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
+                onMouseEnter={() => playSound('hover')}
                 onClick={handleStart}
                 className="px-12 py-5 bg-gradient-to-r from-orange-500 to-red-600 
                            text-white font-bold rounded-full text-xl tracking-wider
@@ -129,7 +141,7 @@ export default function RocketLaunch({ planet, onComplete }) {
           </motion.div>
         )}
 
-        {/* ============ PHASE 'countdown': 3-2-1 ============ */}
+        {/* ============ PHASE 'countdown' ============ */}
         {phase === 'countdown' && (
           <motion.div
             key="countdown"
@@ -144,9 +156,10 @@ export default function RocketLaunch({ planet, onComplete }) {
             <motion.div
               animate={{ y: [-3, 3, -3] }}
               transition={{ duration: 1, repeat: Infinity }}
-              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-9xl opacity-40 z-0"
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-0 opacity-40"
+              style={{ rotate: '-45deg' }}
             >
-              🚀
+              <span className="text-9xl inline-block">🚀</span>
             </motion.div>
 
             <motion.div
@@ -180,7 +193,7 @@ export default function RocketLaunch({ planet, onComplete }) {
           </motion.div>
         )}
 
-        {/* ============ PHASE 1: LIFT OFF (fast: 2s) ============ */}
+        {/* ============ PHASE 1: LIFT OFF ============ */}
         {phase === 1 && (
           <motion.div
             key="phase1"
@@ -206,7 +219,6 @@ export default function RocketLaunch({ planet, onComplete }) {
               ))}
             </div>
 
-            {/* Massive smoke */}
             <div className="absolute bottom-[15%] left-1/2 -translate-x-1/2 z-10 pointer-events-none">
               <motion.div
                 initial={{ scale: 0.3, opacity: 0 }}
@@ -239,9 +251,10 @@ export default function RocketLaunch({ planet, onComplete }) {
               initial={{ bottom: '20%', left: '50%' }}
               animate={{ bottom: '150%', left: '50%' }}
               transition={{ duration: 2, ease: 'easeIn' }}
-              className="absolute -translate-x-1/2 z-20 text-6xl"
+              className="absolute -translate-x-1/2 z-20"
+              style={{ rotate: '-45deg' }}
             >
-              🚀
+              <span className="text-6xl inline-block">🚀</span>
             </motion.div>
 
             <motion.div
@@ -262,66 +275,95 @@ export default function RocketLaunch({ planet, onComplete }) {
           </motion.div>
         )}
 
-        {/* ============ PHASE 2: SPACE (fast: 1.5s) ============ */}
+        {/* ============ PHASE 2: SPACE ============ */}
         {phase === 2 && (
-          <motion.div key="phase2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black">
+          <motion.div
+            key="phase2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black"
+          >
             <div className="absolute inset-0 stars-bg" />
             <motion.div
               initial={{ bottom: '-30%', scale: 1.5 }}
               animate={{ bottom: '-150%', scale: 0.3 }}
               transition={{ duration: 1.5 }}
               className="absolute left-1/2 -translate-x-1/2 w-96 h-96 rounded-full"
-              style={{ background: 'radial-gradient(circle at 30% 30%, #4A90D9, #1E3A8A, #0A1929)' }}
+              style={{
+                background:
+                  'radial-gradient(circle at 30% 30%, #4A90D9, #1E3A8A, #0A1929)',
+              }}
             />
             <motion.div
               initial={{ bottom: '20%', left: '50%' }}
               animate={{ bottom: '80%', left: '50%' }}
               transition={{ duration: 1.5 }}
-              className="absolute -translate-x-1/2 z-20 text-6xl"
+              className="absolute -translate-x-1/2 z-20"
+              style={{ rotate: '-45deg' }}
             >
-              🚀
+              <span className="text-6xl inline-block">🚀</span>
             </motion.div>
             <div className="absolute top-12 left-1/2 -translate-x-1/2 text-center z-10">
-              <h2 className="text-4xl font-bold text-white tracking-wide">Entering Space</h2>
-              <p className="text-gray-400 text-sm mt-2">Escaping Earth's gravity...</p>
+              <h2 className="text-4xl font-bold text-white tracking-wide">
+                Entering Space
+              </h2>
+              <p className="text-gray-400 text-sm mt-2">
+                Escaping Earth's gravity...
+              </p>
             </div>
           </motion.div>
         )}
 
-        {/* ============ PHASE 3: HORIZONTAL (fast: 2s) ============ */}
+        {/* ============ PHASE 3: HORIZONTAL ============ */}
         {phase === 3 && (
-          <motion.div key="phase3" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black">
+          <motion.div
+            key="phase3"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black"
+          >
             <div className="absolute inset-0 stars-bg" />
             <motion.div
               initial={{ right: '5%', top: '40%', scale: 0.3, opacity: 0.5 }}
               animate={{ right: '25%', top: '40%', scale: 1.2, opacity: 1 }}
               transition={{ duration: 2 }}
               className="absolute w-48 h-48 rounded-full"
-              style={{ background: 'radial-gradient(circle at 30% 30%, #D2691E, #8B3A1E, #5C2E16)' }}
+              style={{
+                background:
+                  'radial-gradient(circle at 30% 30%, #D2691E, #8B3A1E, #5C2E16)',
+              }}
             />
             <motion.div
               initial={{ left: '5%', top: '50%', rotate: 0 }}
               animate={{ left: '55%', top: '50%', rotate: 90 }}
               transition={{ duration: 2 }}
-              className="absolute -translate-y-1/2 z-20 text-6xl"
+              className="absolute -translate-y-1/2 z-20"
+              style={{ rotate: '-45deg' }}
             >
-              🚀
+              <span className="text-6xl inline-block">🚀</span>
             </motion.div>
             <div className="absolute top-12 left-1/2 -translate-x-1/2 text-center z-10">
               <h2 className="text-4xl font-bold text-white tracking-wide">
                 Cruising to {planet?.name}
               </h2>
-              <p className="text-gray-400 text-sm mt-2">Distance: {planet?.data?.distance}</p>
+              <p className="text-gray-400 text-sm mt-2">
+                Distance: {planet?.data?.distance}
+              </p>
             </div>
           </motion.div>
         )}
 
-        {/* ============ PHASE 4: APPROACHING (fast: 1.5s) ============ */}
+        {/* ============ PHASE 4: APPROACHING ============ */}
         {phase === 4 && (
-          <motion.div key="phase4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black">
+          <motion.div
+            key="phase4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black"
+          >
             <div className="absolute inset-0 stars-bg" />
             <motion.div
               initial={{ scale: 1.5, opacity: 0.6 }}
@@ -332,15 +374,152 @@ export default function RocketLaunch({ planet, onComplete }) {
               <div
                 className="w-64 h-64 rounded-full"
                 style={{
-                  background: 'radial-gradient(circle at 40% 40%, #E8985E, #C1440E, #8B3A1E)',
+                  background:
+                    'radial-gradient(circle at 40% 40%, #E8985E, #C1440E, #8B3A1E)',
                   boxShadow: '0 0 120px rgba(193, 68, 14, 0.8)',
                 }}
               />
             </motion.div>
             <div className="absolute top-12 left-1/2 -translate-x-1/2 text-center z-10">
-              <h2 className="text-4xl font-bold text-white tracking-wide">Approaching Mars</h2>
-              <p className="text-gray-400 text-sm mt-2">Preparing for landing...</p>
+              <h2 className="text-4xl font-bold text-white tracking-wide">
+                Approaching Mars
+              </h2>
+              <p className="text-gray-400 text-sm mt-2">
+                Preparing for landing...
+              </p>
             </div>
+          </motion.div>
+        )}
+
+        {/* ============ PHASE 5: LANDING SEQUENCE ============ */}
+        {phase === 5 && (
+          <motion.div
+            key="phase5"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black overflow-hidden"
+          >
+            {/* Mars surface rising from bottom */}
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: '40%' }}
+              transition={{ duration: 3, ease: 'easeOut' }}
+              className="absolute bottom-0 left-0 right-0 h-full"
+              style={{
+                background:
+                  'linear-gradient(to bottom, #C1440E 0%, #8B3A1E 40%, #5C2E16 100%)',
+              }}
+            >
+              {[...Array(30)].map((_, i) => (
+                <div
+                  key={i}
+                  className="absolute rounded-full bg-[#5C2E16]"
+                  style={{
+                    width: `${5 + Math.random() * 15}px`,
+                    height: `${5 + Math.random() * 15}px`,
+                    left: `${Math.random() * 100}%`,
+                    top: `${30 + Math.random() * 60}%`,
+                    opacity: 0.4,
+                  }}
+                />
+              ))}
+            </motion.div>
+
+            {/* Stars in upper area */}
+            <div className="absolute inset-0 stars-bg opacity-60" />
+
+            {/* Descending Rocket */}
+            <motion.div
+              initial={{ top: '10%', scale: 1.5 }}
+              animate={{ top: '55%', scale: 1 }}
+              transition={{ duration: 3, ease: 'easeInOut' }}
+              className="absolute left-1/2 -translate-x-1/2 z-20"
+              style={{ rotate: '-45deg' }}
+            >
+              <span className="text-7xl inline-block">🚀</span>
+            </motion.div>
+
+            {/* Engine fire trail */}
+            <motion.div
+              initial={{ top: '15%', opacity: 0.9 }}
+              animate={{ top: '60%', opacity: 0.5 }}
+              transition={{ duration: 3, ease: 'easeInOut' }}
+              className="absolute left-1/2 -translate-x-1/2 z-10 text-6xl"
+            >
+              🔥
+            </motion.div>
+
+            {/* Heat shield glow */}
+            <motion.div
+              initial={{ top: '15%', scale: 1, opacity: 0.8 }}
+              animate={{ top: '60%', scale: 1.5, opacity: 0 }}
+              transition={{ duration: 3, ease: 'easeInOut' }}
+              className="absolute left-1/2 -translate-x-1/2 w-32 h-32 rounded-full z-0"
+              style={{
+                background:
+                  'radial-gradient(circle, #FF6B00, transparent 70%)',
+                filter: 'blur(20px)',
+              }}
+            />
+
+            {/* Landing dust cloud */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.3 }}
+              animate={{ opacity: [0, 0.9, 0.6], scale: [0.3, 2, 3] }}
+              transition={{ delay: 2.5, duration: 2 }}
+              className="absolute left-1/2 -translate-x-1/2 z-30 pointer-events-none"
+              style={{ top: '65%' }}
+            >
+              <span className="text-[200px] inline-block">💨</span>
+            </motion.div>
+
+            {/* Dust particles flying outward */}
+            {[...Array(12)].map((_, i) => {
+              const angle = (i / 12) * Math.PI * 2;
+              return (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: 0, y: 0, scale: 0.5 }}
+                  animate={{
+                    opacity: [0, 0.8, 0],
+                    x: Math.cos(angle) * 200,
+                    y: Math.sin(angle) * 100 + 50,
+                    scale: 1.5,
+                  }}
+                  transition={{ delay: 2.5 + i * 0.05, duration: 1.5 }}
+                  className="absolute left-1/2 z-25 pointer-events-none"
+                  style={{ top: '65%' }}
+                >
+                  <div className="w-8 h-8 bg-[#B8860B] rounded-full opacity-60 blur-sm" />
+                </motion.div>
+              );
+            })}
+
+            {/* Screen shake on landing */}
+            <motion.div
+              animate={{
+                x: [0, -8, 8, -6, 6, -3, 3, 0],
+                y: [0, 6, -6, 4, -4, 2, -2, 0],
+              }}
+              transition={{ delay: 2.5, duration: 0.8 }}
+              className="absolute inset-0"
+            />
+
+            {/* TOUCHDOWN title */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: [0, 1, 1], y: [20, 0, 0] }}
+              transition={{ delay: 3.5, duration: 1 }}
+              className="absolute top-12 left-1/2 -translate-x-1/2 text-center z-40"
+            >
+              <h2 className="text-5xl font-bold text-white tracking-widest drop-shadow-[0_0_30px_rgba(255,120,0,0.9)]">
+                🛬 TOUCHDOWN
+              </h2>
+              <p className="text-orange-200 text-sm mt-2">
+                Welcome to Mars, Captain
+              </p>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -351,13 +530,13 @@ export default function RocketLaunch({ planet, onComplete }) {
           <div className="bg-gray-800 rounded-full h-2 overflow-hidden">
             <motion.div
               initial={{ width: '0%' }}
-              animate={{ width: `${(phase / 4) * 100}%` }}
+              animate={{ width: `${(phase / 5) * 100}%` }}
               transition={{ duration: 0.5 }}
               className="h-full bg-gradient-to-r from-cyan-400 to-orange-500"
             />
           </div>
           <p className="text-gray-400 text-xs text-center mt-2">
-            Mission Progress — Phase {phase}/4
+            Mission Progress — Phase {phase}/5
           </p>
         </div>
       )}

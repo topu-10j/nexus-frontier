@@ -1,6 +1,5 @@
 // src/components/BuildingPanel.jsx
-// BuildingPanel — ৬টা বিল্ডিং drag-drop এর জন্য
-
+// BuildingPanel — ৬টা বিল্ডিং (fixed height, no empty space)
 import { buildings } from '../data/buildings';
 import { useGameStore } from '../store/gameStore';
 import { motion } from 'framer-motion';
@@ -9,12 +8,10 @@ export default function BuildingPanel() {
   const budget = useGameStore((s) => s.budget);
   const addBuilding = useGameStore((s) => s.addBuilding);
 
-  // Drag শুরু হলে বিল্ডিং ডেটা পাঠাবো
   const handleDragStart = (e, building) => {
     e.dataTransfer.setData('building', JSON.stringify(building));
   };
 
-  // Click করলে বিল্ডিং যোগ হবে (drag এর বিকল্প)
   const handleClick = (building) => {
     if (budget >= building.cost) {
       addBuilding({
@@ -29,9 +26,9 @@ export default function BuildingPanel() {
   };
 
   return (
-    <div className="absolute right-3 top-24 bottom-3 w-56 z-50 overflow-y-auto
+    <div className="absolute right-3 top-24 w-56 z-50
                     bg-black/70 backdrop-blur-md rounded-xl p-3
-                    border border-cyan-500/30">
+                    border border-cyan-500/30 shadow-2xl">
       <h3 className="text-cyan-400 font-bold mb-3 text-center text-sm">
         🏗️ BUILDINGS
       </h3>
@@ -39,8 +36,6 @@ export default function BuildingPanel() {
       <div className="space-y-2">
         {buildings.map((building) => {
           const canAfford = budget >= building.cost;
-
-          // effect থাকলে দেখাবো, না থাকলে খালি
           const effectEntries = building.effect
             ? Object.entries(building.effect)
             : [];
@@ -70,7 +65,6 @@ export default function BuildingPanel() {
                 </div>
               </div>
 
-              {/* Effect summary — safety check সহ */}
               {effectEntries.length > 0 && (
                 <div className="text-[10px] text-gray-400 mt-1">
                   {effectEntries.map(([key, val]) => (
@@ -85,8 +79,9 @@ export default function BuildingPanel() {
         })}
       </div>
 
-      <p className="text-[10px] text-gray-500 mt-3 text-center">
-        Drag or click to place
+      {/* Drag hint — compact, right under last building */}
+      <p className="text-[9px] text-gray-500 mt-2 text-center leading-tight">
+        Click or drag to place
       </p>
     </div>
   );

@@ -1,222 +1,335 @@
 // src/components/NEXA.jsx
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// Project NEXUS-FRONTIER — NEXA Robot Mascot Component
-// Screen-এর bottom-right কোণায় fixed থাকবে,
-// gameState বদলালে DeepSeek থেকে ছোট টিপ এনে দেখাবে
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// NEXA AI Mascot — D-Pad + warning + tower messages
+import { useEffect, useState } from 'react';
+import { useGameStore } from '../store/gameStore';
+import { playSound } from '../audio/soundManager';
 
-import { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { askNEXA } from '../services/nexaAI';
-import { sounds } from '../audio/soundManager';
+export default function NEXA() {
+  const {
+    oxygen, power, temperature, radiation, waterLevel, budget, buildings,
+    activeDisaster, missionStatus, deathReason,
+    currentProblem, quizActive, welcomeShown,
+    setProblem, touchNEXA, resolveProblem,
+    setWelcomeShown, setWalkDirection,
+    clearWalkDirection, walkDirection,
+    activeWarning,
+    warningEscalation,
+    towerDiscovered,
+    towerInstalledParts,
+  } = useGameStore();
 
-// ─────────────────────────────────────────────────────────
-// ১. Constants
-// ─────────────────────────────────────────────────────────
+  const [message, setMessage] = useState('');
+  const [visible, setVisible] = useState(false);
+  const [solutionShown, setSolutionShown] = useState(false);
 
-const DEBOUNCE_MS = 1500;   // gameState বদলানোর পর 1.5s অপেক্ষা
-const AUTO_HIDE_MS = 9000;  // popup 9s পর নিজে থেকে বন্ধ হবে
-
-// ─────────────────────────────────────────────────────────
-// ২. NEXA Component
-// ─────────────────────────────────────────────────────────
-
-export default function NEXA({ gameState }) {
-  // ── State ────────────────────────────────────────────
-  const [tip, setTip] = useState('');           // NEXA-র message
-  const [visible, setVisible] = useState(false); // popup দেখাচ্ছে কি?
-  const [loading, setLoading] = useState(false); // API call চলছে?
-
-  // ── Refs ─────────────────────────────────────────────
-  const debounceRef = useRef(null);   // debounce timer
-  const hideTimerRef = useRef(null);  // auto-hide timer
-  const lastStateRef = useRef('');    // আগের gameState snapshot
-
-  // ─────────────────────────────────────────────────────
-  // ৩. gameState change → debounced askNEXA()
-  // ─────────────────────────────────────────────────────
-
+  // ═══════════ WELCOME MESSAGE ═══════════
   useEffect(() => {
-    if (!gameState) return;
-
-    // gameState-কে string-এ convert করি যাতে comparison সহজ হয়
-    const snapshot = JSON.stringify(gameState);
-
-    // আগের state আর একই হলে কিছু করি না
-    if (snapshot === lastStateRef.current) return;
-    lastStateRef.current = snapshot;
-
-    // ── Debounce ──────────────────────────────────────
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    debounceRef.current = setTimeout(async () => {
-      setLoading(true);
-
-      const newTip = await askNEXA(gameState);
-
-      setLoading(false);
-      setTip(newTip);
+    if (welcomeShown) return;
+    const timer = setTimeout(() => {
+      setMessage('Captain! Welcome to Mars. Explore to find the broken NASA tower. Use D-Pad to move!');
       setVisible(true);
+      playSound('nexa');
+      setWelcomeShown();
+      setTimeout(() => setVisible(false), 9000);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [welcomeShown, setWelcomeShown]);
 
-      // 🔔 robotic-ding বাজাই
-      if (sounds?.nexa) {
-        try {
-          sounds.nexa.play();
-        } catch (e) {
-          // sound fail হলে গেম থামবে না
-          console.warn('[NEXA] Sound play failed:', e.message);
-        }
+  // ═══════════ LIVE PROBLEM DETECTION ═══════════
+  useEffect(() => {
+    if (missionStatus !== 'active') return;
+    if (quizActive) return;
+
+    let newProblem = null;
+
+    if (activeDisaster === 'sandstorm') {
+      newProblem = '🌪️ Dust storm! Solar panels disabled!';
+    } else if (activeDisaster === 'solarFlare') {
+      newProblem = '☀️ Solar flare! Radiation rising!';
+    } else if (activeDisaster === 'meteor') {
+      newProblem = '☄️ Meteor shower incoming!';
+    } else if (oxygen < 30) {
+      newProblem = '⚠️ Oxygen low! Touch me for solution.';
+    } else if (power < 30) {
+      newProblem = '⚠️ Power dropping! Touch me.';
+    } else if (temperature < 30) {
+      newProblem = '⚠️ Temperature critical! Touch me.';
+    } else if (radiation > 70) {
+      newProblem = '⚠️ Radiation high! Touch me.';
+    } else if (waterLevel < 30) {
+      newProblem = '⚠️ Water low! Touch me.';
+    }
+
+    if (newProblem !== currentProblem) {
+      if (newProblem) {
+        setProblem(newProblem);
+        playSound('nexa');
+      } else {
+        resolveProblem();
+      }
+    }
+  }, [
+    oxygen, power, temperature, radiation, waterLevel,
+    activeDisaster, missionStatus, quizActive,
+    currentProblem, setProblem, resolveProblem,
+  ]);
+
+  // ═══════════ VICTORY / DEFEAT ═══════════
+  useEffect(() => {
+    if (missionStatus === 'success') {
+      setMessage('🎉 SIGNAL ESTABLISHED! You contacted Earth!');
+      setVisible(true);
+      playSound('victory');
+    } else if (missionStatus === 'failed' && !activeWarning) {
+      setMessage(`💀 ${deathReason || 'Mission failed.'}`);
+      setVisible(true);
+      playSound('nexa');
+    }
+  }, [missionStatus, deathReason, activeWarning]);
+
+  // ═══════════ DIRECTION HANDLER ═══════════
+  const handleDirection = (dir) => {
+    playSound('click');
+    if (walkDirection === dir) {
+      clearWalkDirection();
+    } else {
+      setWalkDirection(dir);
+    }
+  };
+
+  // ═══════════ NEXA BUTTON — solution ═══════════
+  const handleNEXA = () => {
+    playSound('click');
+    touchNEXA();
+    clearWalkDirection();
+
+    // If there's an active warning — show its solution
+    if (activeWarning) {
+      setMessage(activeWarning.solution || '💡 Follow the warning instructions!');
+      setVisible(true);
+      setTimeout(() => setVisible(false), 5000);
+      return;
+    }
+
+    // If there's an active problem — show its solution
+    if (currentProblem && !solutionShown) {
+      let solution = '';
+
+      if (currentProblem.includes('Oxygen')) {
+        solution = '💡 Build Oxygen Generator ($800) or Bio-Dome ($1200)!';
+      } else if (currentProblem.includes('Power')) {
+        solution = '💡 Build Power Grid ($600)!';
+      } else if (currentProblem.includes('Temperature') || currentProblem.includes('Temp')) {
+        solution = '💡 Build Thermal Regulator ($700)!';
+      } else if (currentProblem.includes('Radiation')) {
+        solution = '💡 Build Magnetic Shield ($900)!';
+      } else if (currentProblem.includes('Water')) {
+        solution = '💡 Click an Ice Crater to mine ($1000)!';
+      } else if (
+        currentProblem.includes('Dust storm') ||
+        currentProblem.includes('Dust Storm') ||
+        currentProblem.includes('sandstorm')
+      ) {
+        solution = '💡 Build Magnetic Shield Generator to deflect!';
+      } else if (
+        currentProblem.includes('Solar flare') ||
+        currentProblem.includes('Solar Flare')
+      ) {
+        solution = '💡 Build Magnetic Shield ($900)!';
+      } else if (currentProblem.includes('Meteor') || currentProblem.includes('meteor')) {
+        solution = '💡 Build Magnetic Shield Generator!';
+      } else {
+        solution = '💡 Check your resources, Captain!';
       }
 
-      // ── Auto-hide timer ────────────────────────────
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = setTimeout(() => {
-        setVisible(false);
-      }, AUTO_HIDE_MS);
-    }, DEBOUNCE_MS);
-
-    // ── Cleanup ───────────────────────────────────────
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [gameState]);
-
-  // ─────────────────────────────────────────────────────
-  // ৪. Component unmount হলে সব timer clear করি
-  // ─────────────────────────────────────────────────────
-
-  useEffect(() => {
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    };
-  }, []);
-
-  // ─────────────────────────────────────────────────────
-  // ৫. "Got it!" button handler
-  // ─────────────────────────────────────────────────────
-
-  const handleGotIt = () => {
-    setVisible(false);
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-  };
-
-  // ─────────────────────────────────────────────────────
-  // ৬. Manual open — robot avatar-এ ক্লিক করলে
-  // ─────────────────────────────────────────────────────
-
-  const handleAvatarClick = async () => {
-    if (visible) {
-      setVisible(false);
-      return;
-    }
-
-    // আগের টিপ থাকলে সেটাই দেখাই
-    if (tip) {
+      setMessage(solution);
       setVisible(true);
-      if (sounds?.nexa) sounds.nexa.play();
+      setSolutionShown(true);
+      setTimeout(() => {
+        setVisible(false);
+        setSolutionShown(false);
+      }, 6000);
       return;
     }
 
-    // টিপ না থাকলে এখনই askNEXA call করি
-    setLoading(true);
-    const newTip = await askNEXA(gameState || {});
-    setLoading(false);
-    setTip(newTip);
+    // 🆕 Tower hints
+    if (towerDiscovered && towerInstalledParts?.length < 3) {
+      const installed = towerInstalledParts?.length || 0;
+      setMessage(`📡 Tower repair: ${installed}/3 parts installed. Craft parts at base and walk to tower!`);
+      setVisible(true);
+      setTimeout(() => setVisible(false), 6000);
+      return;
+    }
+
+    // All good
+    setMessage('💡 All systems stable, Captain! 🚀');
     setVisible(true);
-    if (sounds?.nexa) sounds.nexa.play();
+    setTimeout(() => setVisible(false), 3000);
   };
 
-  // ─────────────────────────────────────────────────────
-  // ৭. Render
-  // ─────────────────────────────────────────────────────
+  const dirBtnClass = (dir) =>
+    `absolute w-14 h-14 rounded-lg flex items-center justify-center 
+     border-4 shadow-2xl transition-all cursor-pointer
+     ${
+       walkDirection === dir
+         ? 'bg-gradient-to-b from-green-400 to-green-600 border-yellow-300 scale-110'
+         : 'bg-gradient-to-b from-cyan-400 to-cyan-600 border-white hover:scale-110'
+     }`;
 
   return (
-    <div
-      className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3 pointer-events-none"
-      aria-live="polite"
-    >
-      {/* ── Speech Bubble (popup) ─────────────────────── */}
-      <AnimatePresence>
-        {visible && (
-          <motion.div
-            key="nexa-bubble"
-            initial={{ opacity: 0, y: 20, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            transition={{ type: 'spring', stiffness: 260, damping: 22 }}
-            className="pointer-events-auto max-w-xs rounded-2xl border border-cyan-400/40 
-                       bg-slate-900/95 backdrop-blur-md shadow-[0_0_25px_rgba(34,211,238,0.35)] 
-                       p-4 text-white"
+    <>
+      {/* ═══════════ D-PAD (Bottom Right) ═══════════ */}
+      <div className="absolute bottom-4 right-4 z-40 select-none">
+        <div className="relative w-40 h-40">
+          <button
+            onClick={() => handleDirection('up')}
+            className={`${dirBtnClass('up')} top-0 left-1/2 -translate-x-1/2`}
           >
-            {/* Header — NEXA branding */}
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-lg">🤖</span>
-              <span className="text-xs font-bold tracking-widest text-cyan-300">
-                NEXA
-              </span>
-              <span className="ml-auto text-[10px] text-cyan-500/70">
-                AI COMPANION
+            <span className="text-2xl text-white">▲</span>
+          </button>
+
+          <button
+            onClick={() => handleDirection('left')}
+            className={`${dirBtnClass('left')} top-1/2 left-0 -translate-y-1/2`}
+          >
+            <span className="text-2xl text-white">◄</span>
+          </button>
+
+          <button
+            onClick={() => handleDirection('right')}
+            className={`${dirBtnClass('right')} top-1/2 right-0 -translate-y-1/2`}
+          >
+            <span className="text-2xl text-white">►</span>
+          </button>
+
+          <button
+            onClick={() => handleDirection('down')}
+            className={`${dirBtnClass('down')} bottom-0 left-1/2 -translate-x-1/2`}
+          >
+            <span className="text-2xl text-white">▼</span>
+          </button>
+
+          {/* CENTER — NEXA */}
+          <button
+            onClick={handleNEXA}
+            className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 
+                       w-16 h-16 rounded-full flex items-center justify-center 
+                       border-4 border-white shadow-2xl 
+                       hover:scale-110 active:scale-95 transition-all cursor-pointer
+                       ${
+                         activeWarning || currentProblem
+                           ? 'bg-gradient-to-br from-red-500 via-red-600 to-red-800 animate-pulse'
+                           : 'bg-gradient-to-br from-yellow-400 via-orange-500 to-red-600'
+                       }`}
+          >
+            <span className="text-2xl">
+              {activeWarning && warningEscalation >= 2
+                ? '😡'
+                : activeWarning || currentProblem
+                ? '😠'
+                : '🤖'}
+            </span>
+            {(currentProblem || activeWarning) && (
+              <>
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white animate-ping" />
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white" />
+              </>
+            )}
+          </button>
+        </div>
+
+        {walkDirection && walkDirection !== 'stop' && (
+          <div className="mt-2 text-center">
+            <span className="inline-block bg-green-500/90 text-white text-[10px] font-bold px-3 py-1 rounded-full animate-pulse">
+              🚶 WALKING {walkDirection.toUpperCase()}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* ═══════════ WARNING BANNER ═══════════ */}
+      {activeWarning && !quizActive && (
+        <div className="absolute top-32 left-1/2 -translate-x-1/2 z-40 w-[90%] max-w-md">
+          <div
+            className="rounded-2xl p-4 shadow-2xl border-4 animate-pulse"
+            style={{
+              background: `linear-gradient(135deg, ${activeWarning.color}DD, ${activeWarning.color}99)`,
+              borderColor: activeWarning.color,
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <div className="text-4xl animate-bounce">{activeWarning.icon}</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-xs font-black tracking-wider mb-0.5">
+                  ⚠️ {activeWarning.title}
+                </p>
+                <p className="text-white/95 text-xs leading-tight mb-1">
+                  {activeWarning.message}
+                </p>
+                <p className="text-yellow-200 text-[10px] font-bold">
+                  {activeWarning.solution}
+                </p>
+              </div>
+              <div className="flex flex-col items-center bg-black/40 rounded-xl px-3 py-2 border-2 border-white/30">
+                <span className="text-white text-[9px] font-bold tracking-wider">
+                  TIME
+                </span>
+                <span
+                  className={`text-2xl font-black ${
+                    activeWarning.timeLeft <= 5
+                      ? 'text-red-300 animate-ping'
+                      : activeWarning.timeLeft <= 10
+                      ? 'text-yellow-300'
+                      : 'text-white'
+                  }`}
+                >
+                  {activeWarning.timeLeft}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════ MESSAGE POPUP ═══════════ */}
+      {visible && message && !quizActive && (
+        <div className="absolute right-[300px] top-[35%] -translate-y-1/2 z-40 w-[280px] max-w-[280px]">
+          <div
+            className={`backdrop-blur-lg rounded-2xl p-3 shadow-2xl border-2 flex items-start gap-2
+              ${
+                activeWarning && warningEscalation >= 2
+                  ? 'bg-gradient-to-br from-red-600/95 to-red-800/95 border-red-300'
+                  : activeWarning
+                  ? 'bg-gradient-to-br from-orange-500/95 to-red-600/95 border-orange-300'
+                  : 'bg-gradient-to-br from-cyan-500/95 to-blue-600/95 border-cyan-300'
+              }`}
+          >
+            <div
+              className={`w-10 h-10 rounded-full flex items-center justify-center border-2 border-white flex-shrink-0
+                ${
+                  activeWarning
+                    ? 'bg-gradient-to-br from-red-300 to-red-500'
+                    : 'bg-gradient-to-br from-gray-200 to-gray-400'
+                }`}
+            >
+              <span className="text-xl">
+                {activeWarning && warningEscalation >= 2
+                  ? '😡'
+                  : activeWarning
+                  ? '😠'
+                  : '🤖'}
               </span>
             </div>
-
-            {/* Message */}
-            <p className="text-sm leading-relaxed text-cyan-50">
-              {loading ? 'Thinking…' : tip}
-            </p>
-
-            {/* Got it! button */}
-            {!loading && (
-              <button
-                onClick={handleGotIt}
-                className="mt-3 w-full rounded-lg bg-gradient-to-r from-cyan-500 to-purple-600 
-                           px-3 py-2 text-xs font-semibold text-white 
-                           hover:from-cyan-400 hover:to-purple-500 
-                           active:scale-95 transition-all duration-150
-                           shadow-[0_0_15px_rgba(168,85,247,0.4)]"
-              >
-                Got it! 👍
-              </button>
-            )}
-
-            {/* Triangle pointer (bubble tail) */}
-            <div
-              className="absolute -bottom-2 right-6 h-4 w-4 rotate-45 
-                         border-b border-r border-cyan-400/40 bg-slate-900/95"
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Robot Avatar (always visible, clickable) ─── */}
-      <motion.button
-        onClick={handleAvatarClick}
-        whileHover={{ scale: 1.08 }}
-        whileTap={{ scale: 0.94 }}
-        animate={{
-          y: [0, -6, 0], // subtle floating animation
-        }}
-        transition={{
-          y: { duration: 2.4, repeat: Infinity, ease: 'easeInOut' },
-        }}
-        className="pointer-events-auto relative h-16 w-16 rounded-full 
-                   bg-gradient-to-br from-cyan-500 to-purple-600 
-                   flex items-center justify-center text-3xl 
-                   shadow-[0_0_25px_rgba(34,211,238,0.6)] 
-                   border-2 border-cyan-300/50 
-                   hover:shadow-[0_0_35px_rgba(168,85,247,0.8)] 
-                   transition-shadow duration-300"
-        aria-label="Talk to NEXA"
-        title="Talk to NEXA"
-      >
-        🤖
-
-        {/* Loading pulse indicator */}
-        {loading && (
-          <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-cyan-400 
-                           animate-ping" />
-        )}
-      </motion.button>
-    </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white text-[9px] font-black tracking-wider mb-0.5">
+                NEXA AI {activeWarning && warningEscalation >= 2 && '— FURIOUS'}
+                {activeWarning && warningEscalation === 1 && '— ANGRY'}
+              </p>
+              <p className="text-white text-xs leading-tight">{message}</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
